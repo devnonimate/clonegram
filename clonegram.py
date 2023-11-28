@@ -25,28 +25,47 @@ async def main():
     is_clone_paused = False
     mensagem_anterior = None
     report_data = []
+    analisando_count = 0  # Contador para acompanhar o número de mensagens "ANALISANDO" consecutivas
+    analisando_messages = []  # Lista para armazenar as mensagens "ANALISANDO" consecutivas
 
     @client.on(events.NewMessage(chats=original_channel))
     async def handler(event):
-        nonlocal mensagens_clonadas, green_count, red_count, is_clone_paused, mensagem_anterior
+        nonlocal mensagens_clonadas, green_count, red_count, is_clone_paused, mensagem_anterior, report_data, analisando_count, analisando_messages
 
         if is_clone_paused:
             return
 
-        if "ANALISANDO" in event.text or "ENTRADA CONFIRMADA" in event.text or "APOSTA ENCERRADA" in event.text:
+        if mensagem_anterior and event.text == mensagem_anterior.text:
+            # Apaga a mensagem duplicada no novo canal
+            await client.delete_messages(novo_canal, [event.message.id])
+        else:
+            mensagem_anterior = event.message
+
+            if "ANALISANDO" in event.text:
+                analisando_count += 1
+                analisando_messages.append(event.message)
+
+                if analisando_count >= 1 and "APOSTA ENCERRADA" in event.text:
+                    # Apaga todas as mensagens "ANALISANDO" anteriores no novo canal
+                    for message in analisando_messages:
+                        await client.delete_messages(novo_canal, [message.id])
+
+                    analisando_count = 0
+                    analisando_messages = []
+
+        if "APOSTA ENCERRADA" in event.text:
             modified_text = modify_message_link(event.message)
             await client.send_message(novo_canal, modified_text)
-            if "APOSTA ENCERRADA" in event.text:
-                mensagens_clonadas += 1
-                timestamp = datetime.datetime.now().strftime("%H:%M")
-                if "GREEN" in event.text:
-                    green_count += 1
-                    report_data.append(f"{timestamp} > Win✅")
-                elif "RED" in event.text:   
-                    red_count += 1
-                    report_data.append(f"{timestamp} > RED❌")
-                async for message in client.iter_messages(novo_canal, from_user='me', search='ANALISANDO'):
-                    await message.delete()
+            mensagens_clonadas += 1
+            timestamp = datetime.datetime.now().strftime("%H:%M")
+            if "GREEN" in event.text:
+                green_count += 1
+                report_data.append(f"{timestamp} > Win✅")
+            elif "RED" in event.text:   
+                red_count += 1
+                report_data.append(f"{timestamp} > RED❌")
+            async for message in client.iter_messages(novo_canal, from_user='me', search='ANALISANDO'):
+                await message.delete()
 
         if mensagens_clonadas == 3:
             report = "\n".join(report_data)
