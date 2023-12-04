@@ -23,6 +23,26 @@ def modify_message_link(message):
         return modified_text
     else:
         return ""
+# Função para verificar a diferença de horas no relatório
+def verificar_diferenca_horas(report):
+    lines = report.split('\n')
+    result = []
+
+    for i in range(len(lines)-1):
+        current_line = lines[i]
+        next_line = lines[i+1]
+
+        current_hour = current_line.split('>')[0].strip().split(':')[0]
+        next_hour = next_line.split('>')[0].strip().split(':')[0]
+
+        if int(next_hour) - int(current_hour) >= 1:
+            result.append('')
+
+        result.append(current_line)
+
+    result.append(lines[-1])  # Adiciona a última linha do relatório
+
+    return '\n'.join(result)
 
 # Função principal assíncrona
 async def main():
@@ -62,6 +82,7 @@ async def main():
         if "ANALISANDO" in event.text:
             modified_text = modify_message_link(event.message)
             await client.send_message(novo_canal, modified_text)
+            return  # Retorna para evitar clonagem de outras mensagens
 
         # Verifica se a mensagem contém "ENTRADA CONFIRMADA"
         if "ENTRADA CONFIRMADA" in event.text:
@@ -71,6 +92,8 @@ async def main():
         # Verifica se a mensagem contém "APOSTA ENCERRADA"
         if "APOSTA ENCERRADA" in event.text:
             modified_text = modify_message_link(event.message)
+            if "ENTRADA CONFIRMADA" in event.text:
+                await asyncio.sleep(8)  # Atraso de 30 segundos
             await client.send_message(novo_canal, modified_text)
             mensagens_clonadas += 1
             timestamp = datetime.datetime.now().strftime("%H:%M")
@@ -86,10 +109,13 @@ async def main():
                 if "ANALISANDO" in message.text:
                     await client.delete_messages(novo_canal, message)
 
+
         # Verifica se o número de mensagens clonadas é igual a 3
         if mensagens_clonadas == 10:
+            current_date = datetime.datetime.now().strftime("%d/%m/%Y")
             report = "\n".join(report_data)
-            await client.send_message(novo_canal, f'RELATÓRIO:\n{report}')
+            modified_report = verificar_diferenca_horas(report)  # Aplica a verificação de diferença de horas
+            client.send_message(novo_canal, f'RELATÓRIO: {current_date}\n{modified_report}\n\n')
             mensagens_clonadas = 0
             green_count = 0
             red_count = 0
@@ -104,16 +130,13 @@ async def main():
         nonlocal is_clone_paused
         while True:
             now = datetime.datetime.now().time()
-            if now.hour == 11 and now.minute == 0:
+            if now.hour == 20 and now.minute == 30:
                 is_clone_paused = False
             elif now.hour == 16 and now.minute == 0:
                 is_clone_paused = False
             elif now.hour == 20 and now.minute == 0:
                 is_clone_paused = False
             await asyncio.sleep(1)  # Verifica a cada minuto
-
-    # Executa a função para retomar o processo de clonagem em segundo plano
-    asyncio.ensure_future(resume_cloning())
 
     # Executa o cliente até que a conexão seja encerrada
     await client.run_until_disconnected()
